@@ -108,11 +108,12 @@ if not DATABASE_URL:
 
 _db = dj_database_url.parse(DATABASE_URL, conn_max_age=0)
 _db_options = _db.setdefault("OPTIONS", {})
-# The transaction pooler (Supavisor, port 6543) does not support server-side
-# prepared statements, so psycopg's automatic preparation must be disabled.
-_db_options["prepare_threshold"] = None
-if _db.get("HOST") not in {"localhost", "127.0.0.1", ""}:
-    _db_options.setdefault("sslmode", "require")
+if "postgresql" in _db["ENGINE"]:
+    # The transaction pooler (Supavisor, port 6543) does not support server-side
+    # prepared statements, so psycopg's automatic preparation must be disabled.
+    _db_options["prepare_threshold"] = None
+    if _db.get("HOST") not in {"localhost", "127.0.0.1", ""}:
+        _db_options.setdefault("sslmode", "require")
 # Server-side cursors break under transaction pooling.
 _db["DISABLE_SERVER_SIDE_CURSORS"] = True
 

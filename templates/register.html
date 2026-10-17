@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Kayıt ol · Kararsızım{% endblock %}
+
+{% block content %}
+<section class="card auth-card">
+  <h1>Aramıza katıl 🎉</h1>
+  <p class="muted">Anketlerde sadece kullanıcı adın görünür. E-postan kimseyle paylaşılmaz.</p>
+
+  <form data-auth-form="register" novalidate>
+    <p class="form-error" data-error-for="__all__" role="alert" hidden></p>
+
+    <div class="field">
+      <label for="username">Kullanıcı adı</label>
+      <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" minlength="3" maxlength="20" required>
+      <p class="hint">3-20 karakter; harf, rakam ve _ kullanabilirsin.</p>
+      <p class="field-error" data-error-for="username" hidden></p>
+    </div>
+
+    <div class="field">
+      <label for="email">E-posta</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+      <p class="field-error" data-error-for="email" hidden></p>
+    </div>
+
+    <div class="field">
+      <label for="password">Parola</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="hint">En az 8 karakter.</p>
+      <p class="field-error" data-error-for="password" hidden></p>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-block">Kayıt ol</button>
+  </form>
+
+  <p class="auth-switch">Zaten hesabın var mı? <a href="/giris/" data-keep-next>Giriş yap</a></p>
+</section>
+{% endblock %}

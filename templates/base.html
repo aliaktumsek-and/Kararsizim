@@ -19,7 +19,7 @@
         <span class="logo-mark" aria-hidden="true">🤔</span>
         <span>Kararsızım</span>
       </a>
-      {% block header_actions %}{% endblock %}
+      <nav id="auth-nav" class="auth-nav" aria-label="Hesap"></nav>
     </div>
   </header>
 
@@ -29,6 +29,8 @@
     </div>
   </main>
 
+  <script src="{% static 'js/api.js' %}"></script>
+  <script src="{% static 'js/auth.js' %}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
