@@ -1,7 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Prefetch
-from django.http import Http404, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -21,6 +21,15 @@ def index(request):
 @ensure_csrf_cookie
 def create_page(request):
     return render(request, "create.html")
+
+
+def detail_page(request, poll_id):
+    poll = get_object_or_404(Poll, pk=poll_id)
+    return render(request, "poll_detail.html", {"poll": poll})
+
+
+def _not_found():
+    return JsonResponse({"errors": {"__all__": ["Anket bulunamadı."]}}, status=404)
 
 
 def _poll_queryset():
@@ -79,17 +88,38 @@ def poll_list(request):
     )
 
 
-@require_GET
 def poll_detail(request, poll_id):
     poll = _poll_queryset().filter(pk=poll_id).first()
     if poll is None:
-        raise Http404
+        return _not_found()
     return JsonResponse(serialize_poll(poll, _my_votes(request, [poll]).get(poll.id)))
+
+
+def poll_delete(request, poll_id):
+    if not request.user.is_authenticated:
+        return JsonResponse({"errors": {"__all__": ["Anketi silmek için giriş yapmalısın."]}}, status=401)
+    poll = Poll.objects.filter(pk=poll_id).first()
+    if poll is None:
+        return _not_found()
+    if poll.author_id != request.user.id:
+        return JsonResponse({"errors": {"__all__": ["Sadece kendi anketini silebilirsin."]}}, status=403)
+    poll.delete()  # options and votes are removed by cascade
+    return HttpResponse(status=204)
+
+
+@require_http_methods(["GET", "DELETE"])
+def poll_item(request, poll_id):
+    """/api/polls/<id>/: GET returns one poll, DELETE removes it (author only)."""
+    if request.method == "DELETE":
+        return poll_delete(request, poll_id)
+    return poll_detail(request, poll_id)
 
 
 @require_POST
 def poll_vote(request, poll_id):
-    poll = get_object_or_404(Poll, pk=poll_id)
+    poll = Poll.objects.filter(pk=poll_id).first()
+    if poll is None:
+        return _not_found()
     data = read_json(request) or {}
     option_id = data.get("option_id")
     option = None

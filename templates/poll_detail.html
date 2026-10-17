@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ poll.question }} · Kararsızım{% endblock %}
+
+{% block head %}
+<meta property="og:title" content="{{ poll.question }}">
+<meta property="og:description" content="Kararsızım'da bu ankete oy ver ve karar vermesine yardım et.">
+<meta property="og:type" content="website">
+{% endblock %}
+
+{% block content %}
+<a class="back-link" href="/">← Tüm anketler</a>
+<div id="poll" data-poll-id="{{ poll.id }}"></div>
+<p id="poll-status" class="feed-status" role="status">Anket yükleniyor…</p>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/vote.js' %}"></script>
+<script src="{% static 'js/poll-card.js' %}"></script>
+<script src="{% static 'js/detail.js' %}"></script>
+{% endblock %}

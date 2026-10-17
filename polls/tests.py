@@ -223,3 +223,58 @@ class PollCreateTests(TestCase):
 
     def test_put_not_allowed(self):
         self.assertEqual(self.client.put(self.URL).status_code, 405)
+
+
+class PollDeleteAndPageTests(TestCase):
+    def setUp(self):
+        self.author = User.objects.create_user("ali_k", "ali@example.com", "kedi-masa-2026")
+        self.other = User.objects.create_user("veli", "veli@example.com", "kedi-masa-2026")
+        self.poll, (self.yes, _) = make_poll(self.author, "Silinecek mi?")
+        Vote.objects.create(poll=self.poll, option=self.yes, user=self.other)
+
+    def url(self, poll=None):
+        return f"/api/polls/{(poll or self.poll).id}/"
+
+    def test_anonymous_cannot_delete(self):
+        self.assertEqual(self.client.delete(self.url()).status_code, 401)
+        self.assertTrue(Poll.objects.filter(pk=self.poll.pk).exists())
+
+    def test_non_author_cannot_delete(self):
+        self.client.login(username="veli", password="kedi-masa-2026")
+        self.assertEqual(self.client.delete(self.url()).status_code, 403)
+        self.assertTrue(Poll.objects.filter(pk=self.poll.pk).exists())
+
+    def test_author_deletes_poll_with_options_and_votes(self):
+        self.client.login(username="ali_k", password="kedi-masa-2026")
+        self.assertEqual(self.client.delete(self.url()).status_code, 204)
+        self.assertEqual(Poll.objects.count(), 0)
+        self.assertEqual(Option.objects.count(), 0)
+        self.assertEqual(Vote.objects.count(), 0)
+        self.assertEqual(self.client.get(self.url()).status_code, 404)
+
+    def test_delete_missing_poll_is_json_404(self):
+        self.client.login(username="ali_k", password="kedi-masa-2026")
+        response = self.client.delete("/api/polls/999999/")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("errors", response.json())
+
+    def test_delete_requires_csrf(self):
+        from django.test import Client
+
+        strict = Client(enforce_csrf_checks=True)
+        strict.login(username="ali_k", password="kedi-masa-2026")
+        self.assertEqual(strict.delete(self.url()).status_code, 403)
+        self.assertTrue(Poll.objects.filter(pk=self.poll.pk).exists())
+
+    def test_poll_page_renders_and_escapes_question(self):
+        poll, _ = make_poll(self.author, "<script>alert(1)</script>?")
+        response = self.client.get(f"/anket/{poll.id}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+
+    def test_missing_poll_page_and_unknown_url_use_the_404_template(self):
+        for url in ("/anket/999999/", "/boyle-bir-sayfa/"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 404)
+            self.assertContains(response, "Bu sayfa bulunamadı", status_code=404)
