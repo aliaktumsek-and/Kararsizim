@@ -421,3 +421,57 @@ button.poll-result:disabled {
   font-size: 0.85rem;
   color: var(--muted);
 }
+
+/* --- Create poll --- */
+
+.create-cta {
+  margin-bottom: var(--space-5);
+}
+
+.option-fieldset {
+  min-width: 0;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  border: 0;
+}
+
+.option-fieldset legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.option-list {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.option-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.option-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.option-remove {
+  flex-shrink: 0;
+  width: 48px;
+  min-height: 48px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.option-remove:hover {
+  border-color: #E5365F;
+  color: #C81E4A;
+}

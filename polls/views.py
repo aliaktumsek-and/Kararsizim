@@ -1,18 +1,26 @@
+from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Prefetch
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from config.jsonutil import read_json
 
-from .models import Option, Poll, Vote
+from .models import MAX_OPTIONS, MIN_OPTIONS, OPTION_MAX_LENGTH, QUESTION_MAX_LENGTH, Option, Poll, Vote
 
 PAGE_SIZE = 10
 
 
 def index(request):
     return render(request, "index.html")
+
+
+@login_required
+@ensure_csrf_cookie
+def create_page(request):
+    return render(request, "create.html")
 
 
 def _poll_queryset():
@@ -51,7 +59,6 @@ def serialize_poll(poll, my_vote=None):
     }
 
 
-@require_GET
 def poll_list(request):
     try:
         page = max(int(request.GET.get("page", 1)), 1)
@@ -101,3 +108,66 @@ def poll_vote(request, poll_id):
 
     fresh = _poll_queryset().get(pk=poll.pk)
     return JsonResponse(serialize_poll(fresh, option.id if request.user.is_authenticated else None))
+
+
+def _validate_new_poll(data):
+    """Return (question, options, errors) for a create-poll payload."""
+    errors = {}
+
+    question = data.get("question")
+    question = question.strip() if isinstance(question, str) else ""
+    if not question:
+        errors["question"] = ["Soru boş olamaz."]
+    elif len(question) > QUESTION_MAX_LENGTH:
+        errors["question"] = [f"Soru en fazla {QUESTION_MAX_LENGTH} karakter olabilir."]
+
+    raw_options = data.get("options")
+    options = []
+    if not isinstance(raw_options, list):
+        errors["options"] = ["Seçenekler gönderilmedi."]
+    else:
+        options = [o.strip() if isinstance(o, str) else "" for o in raw_options]
+        problems = []
+        if not MIN_OPTIONS <= len(options) <= MAX_OPTIONS:
+            problems.append(f"Anket için {MIN_OPTIONS} ile {MAX_OPTIONS} arasında seçenek eklemelisin.")
+        if any(not o for o in options):
+            problems.append("Seçenekler boş olamaz.")
+        if any(len(o) > OPTION_MAX_LENGTH for o in options):
+            problems.append(f"Her seçenek en fazla {OPTION_MAX_LENGTH} karakter olabilir.")
+        filled = [o.casefold() for o in options if o]
+        if len(filled) != len(set(filled)):
+            problems.append("Aynı seçenek birden fazla kez eklenmiş.")
+        if problems:
+            errors["options"] = problems
+
+    return question, options, errors
+
+
+@require_POST
+def poll_create(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"errors": {"__all__": ["Anket oluşturmak için giriş yapmalısın."]}}, status=401)
+
+    data = read_json(request)
+    if data is None:
+        return JsonResponse({"errors": {"__all__": ["Geçersiz istek."]}}, status=400)
+
+    question, options, errors = _validate_new_poll(data)
+    if errors:
+        return JsonResponse({"errors": errors}, status=400)
+
+    with transaction.atomic():
+        poll = Poll.objects.create(author=request.user, question=question)
+        Option.objects.bulk_create(
+            [Option(poll=poll, text=text, position=index) for index, text in enumerate(options)]
+        )
+
+    return JsonResponse(serialize_poll(_poll_queryset().get(pk=poll.pk), None), status=201)
+
+
+@require_http_methods(["GET", "POST"])
+def poll_collection(request):
+    """/api/polls/: GET lists polls, POST creates one."""
+    if request.method == "POST":
+        return poll_create(request)
+    return poll_list(request)

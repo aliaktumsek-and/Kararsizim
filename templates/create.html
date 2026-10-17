@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Anket oluştur · Kararsızım{% endblock %}
+
+{% block content %}
+<section class="card auth-card">
+  <h1>Ne konuda kararsızsın? 🤔</h1>
+  <p class="muted">Bir soru sor, 2 ile 5 seçenek ekle. Herkes oy verebilir.</p>
+
+  <form id="create-form" novalidate>
+    <p class="form-error" data-error-for="__all__" role="alert" hidden></p>
+
+    <div class="field">
+      <label for="question">Sorun</label>
+      <input id="question" name="question" type="text" maxlength="140" placeholder="Bugün sinemaya mı gitsem restorana mı?" required>
+      <p class="hint"><span id="question-count">0</span>/140</p>
+      <p class="field-error" data-error-for="question" hidden></p>
+    </div>
+
+    <fieldset class="field option-fieldset">
+      <legend>Seçenekler</legend>
+      <div id="option-list" class="option-list"></div>
+      <p class="field-error" data-error-for="options" hidden></p>
+      <button id="add-option" type="button" class="btn btn-ghost btn-outline btn-sm">+ Seçenek ekle</button>
+      <p class="hint" id="option-hint">En az 2, en fazla 5 seçenek.</p>
+    </fieldset>
+
+    <button type="submit" class="btn btn-primary btn-block">Anketi yayınla</button>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/create.js' %}"></script>
+{% endblock %}

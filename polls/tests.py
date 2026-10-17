@@ -134,3 +134,92 @@ class VoteApiTests(TestCase):
 
         strict = Client(enforce_csrf_checks=True)
         self.assertEqual(self.vote(self.yes.id, client=strict).status_code, 403)
+
+
+class PollCreateTests(TestCase):
+    URL = "/api/polls/"
+
+    def setUp(self):
+        self.user = User.objects.create_user("ali_k", "ali-private@example.com", "kedi-masa-2026")
+
+    def create(self, **overrides):
+        import json
+
+        payload = {"question": "Sinema mi restoran mı?", "options": ["Sinema", "Restoran"]}
+        payload.update(overrides)
+        return self.client.post(self.URL, data=json.dumps(payload), content_type="application/json")
+
+    def login(self):
+        self.client.login(username="ali_k", password="kedi-masa-2026")
+
+    def test_anonymous_gets_401_and_nothing_is_created(self):
+        self.assertEqual(self.create().status_code, 401)
+        self.assertEqual(Poll.objects.count(), 0)
+
+    def test_create_returns_poll_in_order_with_author_and_no_email(self):
+        self.login()
+        response = self.create(question="  Soru?  ", options=[" B ", "A", "C"])
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["question"], "Soru?")
+        self.assertEqual(body["author"], "ali_k")
+        self.assertEqual([o["text"] for o in body["options"]], ["B", "A", "C"])
+        self.assertEqual(body["total_votes"], 0)
+        self.assertNotIn("ali-private@example.com", response.content.decode())
+        # and it shows up at the top of the feed
+        self.assertEqual(self.client.get(self.URL).json()["polls"][0]["id"], body["id"])
+
+    def test_option_count_bounds(self):
+        self.login()
+        for count, expected in ((0, 400), (1, 400), (2, 201), (5, 201), (6, 400)):
+            response = self.create(options=[f"Seçenek {i}" for i in range(count)])
+            self.assertEqual(response.status_code, expected, count)
+            if expected == 400:
+                self.assertIn("options", response.json()["errors"])
+        self.assertEqual(Poll.objects.count(), 2)
+
+    def test_invalid_content_is_rejected_atomically(self):
+        self.login()
+        bad_payloads = [
+            {"question": "   "},
+            {"question": "x" * 141},
+            {"options": ["A", "  "]},
+            {"options": ["A", "a"]},
+            {"options": ["A", "x" * 61]},
+            {"options": ["A", 5]},
+            {"options": "A,B"},
+            {"question": None},
+        ]
+        for payload in bad_payloads:
+            self.assertEqual(self.create(**payload).status_code, 400, payload)
+        self.assertEqual(Poll.objects.count(), 0)
+        self.assertEqual(Option.objects.count(), 0)
+
+    def test_limits_are_inclusive(self):
+        self.login()
+        response = self.create(question="x" * 140, options=["a" * 60, "b"])
+        self.assertEqual(response.status_code, 201)
+
+    def test_malformed_body(self):
+        self.login()
+        response = self.client.post(self.URL, data="nope", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_csrf_is_enforced(self):
+        import json
+
+        from django.test import Client
+
+        strict = Client(enforce_csrf_checks=True)
+        strict.login(username="ali_k", password="kedi-masa-2026")
+        response = strict.post(self.URL, data=json.dumps({}), content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_create_page_requires_login(self):
+        response = self.client.get("/olustur/")
+        self.assertRedirects(response, "/giris/?next=/olustur/", fetch_redirect_response=False)
+        self.login()
+        self.assertEqual(self.client.get("/olustur/").status_code, 200)
+
+    def test_put_not_allowed(self):
+        self.assertEqual(self.client.put(self.URL).status_code, 405)
