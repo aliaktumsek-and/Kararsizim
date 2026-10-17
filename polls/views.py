@@ -3,6 +3,7 @@ from django.db import transaction
 from django.db.models import Count, Prefetch
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
@@ -26,6 +27,16 @@ def create_page(request):
 def detail_page(request, poll_id):
     poll = get_object_or_404(Poll, pk=poll_id)
     return render(request, "poll_detail.html", {"poll": poll})
+
+
+def _closed_response(poll, request):
+    """409 with the current poll so the client can redraw it as closed."""
+    fresh = _poll_queryset().get(pk=poll.pk)
+    mine = _my_votes(request, [fresh]).get(fresh.id)
+    return JsonResponse(
+        {"errors": {"__all__": ["Bu anket kapandı, artık oy verilemez."]}, "poll": serialize_poll(fresh, mine)},
+        status=409,
+    )
 
 
 def _not_found():
@@ -55,6 +66,9 @@ def serialize_poll(poll, my_vote=None):
         "author": poll.author.username,  # never expose the email
         "created_at": poll.created_at.isoformat(),
         "total_votes": total,
+        "is_closed": poll.is_closed,
+        # Automatic deadline, only meaningful while the poll is still open.
+        "closes_at": None if poll.is_closed else poll.expires_at.isoformat(),
         "options": [
             {
                 "id": option.id,
@@ -75,6 +89,8 @@ def poll_list(request):
         page = 1
     start = (page - 1) * PAGE_SIZE
     queryset = _poll_queryset()
+    if request.GET.get("status") == "closed":
+        queryset = queryset.closed()
     if request.GET.get("sort") == "popular":
         queryset = queryset.annotate(vote_total=Count("votes")).order_by("-vote_total", "-created_at", "-id")
     # Fetch one extra row to learn whether another page exists without a COUNT query.
@@ -123,6 +139,8 @@ def poll_vote(request, poll_id):
     poll = Poll.objects.filter(pk=poll_id).first()
     if poll is None:
         return _not_found()
+    if poll.is_closed:
+        return _closed_response(poll, request)
     data = read_json(request) or {}
     option_id = data.get("option_id")
     option = None
@@ -204,3 +222,20 @@ def poll_collection(request):
     if request.method == "POST":
         return poll_create(request)
     return poll_list(request)
+
+
+@require_POST
+def poll_close(request, poll_id):
+    """Close a poll early. Author only; closing an already closed poll is a no-op."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"errors": {"__all__": ["Anketi kapatmak için giriş yapmalısın."]}}, status=401)
+    poll = Poll.objects.filter(pk=poll_id).first()
+    if poll is None:
+        return _not_found()
+    if poll.author_id != request.user.id:
+        return JsonResponse({"errors": {"__all__": ["Sadece kendi anketini kapatabilirsin."]}}, status=403)
+    if poll.closed_at is None and not poll.is_closed:
+        poll.closed_at = timezone.now()
+        poll.save(update_fields=["closed_at"])
+    fresh = _poll_queryset().get(pk=poll.pk)
+    return JsonResponse(serialize_poll(fresh, _my_votes(request, [fresh]).get(fresh.id)))

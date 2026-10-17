@@ -1,4 +1,4 @@
-// Poll feed: tabs (newest / popular), paging and cards (see poll-card.js).
+// Poll feed: tabs (newest / popular / closed), paging and cards (see poll-card.js).
 (function () {
   const feed = document.getElementById("feed");
   if (!feed) return;
@@ -6,13 +6,18 @@
   const moreButton = document.getElementById("feed-more");
   const tabs = Array.from(document.querySelectorAll("[data-sort]"));
 
-  let sort = "new";
+  let tab = "new";
   let page = 0;
   let loading = false;
   let generation = 0; // bumped on tab change so late responses are ignored
   let auth = { authenticated: false, username: null };
 
-  const EMPTY_MESSAGE = "Henüz anket yok. İlk anketi sen aç!";
+  const EMPTY_MESSAGES = {
+    new: "Henüz anket yok. İlk anketi sen aç!",
+    popular: "Henüz anket yok. İlk anketi sen aç!",
+    closed: "Henüz kapanan anket yok.",
+  };
+  const QUERIES = { new: "", popular: "&sort=popular", closed: "&status=closed" };
 
   function setStatus(message) {
     status.textContent = message || "";
@@ -21,7 +26,7 @@
 
   function onDelete(card) {
     card.remove();
-    if (!feed.children.length) setStatus(EMPTY_MESSAGE);
+    if (!feed.children.length) setStatus(EMPTY_MESSAGES[tab]);
   }
 
   async function loadMore() {
@@ -31,7 +36,7 @@
     moreButton.disabled = true;
     if (page === 0) setStatus("Anketler yükleniyor…");
 
-    const url = "/api/polls/?page=" + (page + 1) + (sort === "popular" ? "&sort=popular" : "");
+    const url = "/api/polls/?page=" + (page + 1) + QUERIES[tab];
     const [authState, response] = await Promise.all([window.authReady, window.api.get(url)]);
     if (mine !== generation) return; // a tab switch started a newer load
 
@@ -49,15 +54,15 @@
 
     page = data.page;
     data.polls.forEach((poll) => feed.append(window.PollCard.create(poll, { auth, onDelete })));
-    setStatus(feed.children.length ? "" : EMPTY_MESSAGE);
+    setStatus(feed.children.length ? "" : EMPTY_MESSAGES[tab]);
     moreButton.textContent = "Daha fazla yükle";
     moreButton.hidden = !data.has_next;
   }
 
   function selectTab(next) {
-    if (next === sort) return;
-    sort = next;
-    tabs.forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.sort === sort)));
+    if (next === tab) return;
+    tab = next;
+    tabs.forEach((button) => button.setAttribute("aria-selected", String(button.dataset.sort === tab)));
     generation += 1;
     loading = false;
     page = 0;
@@ -66,7 +71,7 @@
     loadMore();
   }
 
-  tabs.forEach((tab) => tab.addEventListener("click", () => selectTab(tab.dataset.sort)));
+  tabs.forEach((button) => button.addEventListener("click", () => selectTab(button.dataset.sort)));
   moreButton.addEventListener("click", loadMore);
   loadMore();
 })();

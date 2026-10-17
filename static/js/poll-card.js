@@ -27,6 +27,14 @@
     return new Date(iso).toLocaleDateString("tr-TR");
   }
 
+  function timeLeft(iso) {
+    const minutes = Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 60000));
+    if (minutes < 1) return "1 dk'dan az kaldı";
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return (hours ? hours + " sa " : "") + (rest ? rest + " dk " : "") + "kaldı";
+  }
+
   // One-line summary of how the vote is going.
   function verdict(poll) {
     if (!poll.total_votes) return "Henüz oy yok";
@@ -91,12 +99,18 @@
   function paint(card, poll, ctx, errorMessage) {
     const mine = myChoice(poll, ctx);
     const hasVoted = mine !== null && mine !== undefined;
-    const canChange = hasVoted && ctx.auth.authenticated;
+    const closed = poll.is_closed;
+    const canChange = hasVoted && ctx.auth.authenticated && !closed;
 
     const when = el("a", "poll-time", timeAgo(poll.created_at));
     when.href = "/anket/" + poll.id + "/";
     const meta = el("p", "poll-meta");
     meta.append("@" + poll.author + " · ", when);
+    if (closed) {
+      meta.append(" · ", el("span", "poll-closed", "Kapalı"));
+    } else if (poll.closes_at) {
+      meta.append(" · " + timeLeft(poll.closes_at));
+    }
 
     card.replaceChildren(el("h2", "poll-question", poll.question), meta, renderMeter(poll));
     card.append(el("p", "poll-verdict", verdict(poll)));
@@ -106,10 +120,11 @@
     poll.options.forEach((option, index) => {
       const isMine = hasVoted && option.id === mine;
       const classes = "poll-chip color-" + (index % 5) + (isMine ? " is-mine" : "");
-      const interactive = !hasVoted || canChange;
+      const interactive = !closed && (!hasVoted || canChange);
       const chip = el(interactive ? "button" : "div", classes);
       chip.append(el("span", "chip-dot"), el("span", "chip-text", (isMine ? "✓ " : "") + option.text));
-      if (hasVoted) chip.append(el("span", "chip-pct", option.percent + "%"));
+      // Percentages are revealed after voting, and always once the poll is closed.
+      if (hasVoted || closed) chip.append(el("span", "chip-pct", option.percent + "%"));
 
       if (interactive) {
         chip.type = "button";
@@ -133,7 +148,14 @@
       share.addEventListener("click", () => copyLink(poll, share));
       actions.append(share);
     }
-    if (ctx.auth.authenticated && ctx.auth.username === poll.author) {
+    const isOwner = ctx.auth.authenticated && ctx.auth.username === poll.author;
+    if (isOwner && !closed) {
+      const close = el("button", "btn btn-ghost btn-outline btn-sm", "Anketi kapat");
+      close.type = "button";
+      close.addEventListener("click", () => closePoll(card, poll, ctx, close));
+      actions.append(close);
+    }
+    if (isOwner) {
       const remove = el("button", "btn btn-ghost btn-danger btn-sm", "Sil");
       remove.type = "button";
       remove.addEventListener("click", () => deletePoll(card, poll, ctx, remove));
@@ -154,8 +176,22 @@
     if (result.ok) {
       paint(card, result.poll, ctx);
     } else {
-      paint(card, poll, ctx, result.error);
+      // A closed poll comes back with its fresh state so the card redraws as closed.
+      paint(card, result.poll || poll, ctx, result.error);
     }
+  }
+
+  async function closePoll(card, poll, ctx, button) {
+    if (!window.confirm("Anketi kapatmak istediğine emin misin? Kapanan ankete artık oy verilemez.")) return;
+    button.disabled = true;
+    const { ok, data } = await window.api.post("/api/polls/" + poll.id + "/close/");
+    if (ok && data && data.id) {
+      paint(card, data, ctx);
+      return;
+    }
+    const errors = data && data.errors;
+    const first = errors && Object.values(errors)[0];
+    paint(card, poll, ctx, (first && first[0]) || "Anket kapatılamadı. Lütfen tekrar dene.");
   }
 
   async function deletePoll(card, poll, ctx, button) {

@@ -21,7 +21,7 @@
     }
   }
 
-  // Resolves to { ok, poll, error }. Anonymous successes are remembered locally.
+  // Resolves to { ok, poll, error } (poll is also set when the poll turned out to be closed). Anonymous successes are remembered locally.
   async function vote(pollId, optionId, authenticated) {
     const { ok, data } = await window.api.post("/api/polls/" + pollId + "/vote/", {
       option_id: optionId,
@@ -29,7 +29,11 @@
     if (!ok || !data || !data.id) {
       const errors = data && data.errors;
       const first = errors && Object.values(errors)[0];
-      return { ok: false, error: (first && first[0]) || "Oy verilemedi. Lütfen tekrar dene." };
+      return {
+        ok: false,
+        error: (first && first[0]) || "Oy verilemedi. Lütfen tekrar dene.",
+        poll: data && data.poll ? data.poll : null,
+      };
     }
     if (!authenticated) setLocalVote(pollId, optionId);
     return { ok: true, poll: data };

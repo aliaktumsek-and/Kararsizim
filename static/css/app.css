@@ -389,6 +389,11 @@ main {
   color: inherit;
 }
 
+.poll-closed {
+  font-weight: 600;
+  color: #C81E4A;
+}
+
 .poll-meter {
   display: flex;
   gap: 2px;
