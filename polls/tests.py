@@ -278,3 +278,33 @@ class PollDeleteAndPageTests(TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 404)
             self.assertContains(response, "Bu sayfa bulunamadı", status_code=404)
+
+
+class PollSortTests(TestCase):
+    def setUp(self):
+        self.author = User.objects.create_user("ali_k", "ali@example.com", "kedi-masa-2026")
+
+    def questions(self, query=""):
+        return [p["question"] for p in self.client.get("/api/polls/" + query).json()["polls"]]
+
+    def test_popular_sorts_by_votes_then_newest(self):
+        quiet, _ = make_poll(self.author, "Sessiz", age_minutes=1)
+        busy, (yes, _) = make_poll(self.author, "Kalabalık", age_minutes=50)
+        mid, (mid_yes, _) = make_poll(self.author, "Orta", age_minutes=30)
+        for _ in range(3):
+            Vote.objects.create(poll=busy, option=yes)
+        Vote.objects.create(poll=mid, option=mid_yes)
+        self.assertEqual(self.questions(), ["Sessiz", "Orta", "Kalabalık"])
+        self.assertEqual(self.questions("?sort=popular"), ["Kalabalık", "Orta", "Sessiz"])
+
+    def test_unknown_sort_falls_back_to_newest(self):
+        make_poll(self.author, "Eski", age_minutes=10)
+        make_poll(self.author, "Yeni", age_minutes=1)
+        self.assertEqual(self.questions("?sort=bogus"), ["Yeni", "Eski"])
+
+    def test_popular_keeps_query_count_constant(self):
+        for i in range(10):
+            poll, options = make_poll(self.author, f"Soru {i}")
+            Vote.objects.create(poll=poll, option=options[0])
+        with self.assertNumQueries(2):
+            self.client.get("/api/polls/?sort=popular")

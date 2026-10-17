@@ -1,5 +1,6 @@
 // Shared poll card used by the feed and the single-poll page.
-// A card shows tappable options until the visitor has voted, then results.
+// Layout: question, author/time, multi-color vote meter, verdict + count, then
+// option chips. Chips are tappable until the visitor has voted.
 // All user-supplied text is written with textContent (never innerHTML).
 //
 // PollCard.create(poll, ctx) -> <article>
@@ -26,6 +27,19 @@
     return new Date(iso).toLocaleDateString("tr-TR");
   }
 
+  // One-line summary of how the vote is going.
+  function verdict(poll) {
+    if (!poll.total_votes) return "Henüz oy yok";
+    const sorted = poll.options.slice().sort((a, b) => b.votes - a.votes);
+    const top = sorted[0].percent;
+    const second = sorted[1].percent;
+    if (top >= 60) return "Karar net";
+    if (top - second <= 10) {
+      return poll.options.length >= 3 && top < 40 ? "Kalabalık da kararsız" : "Az farkla önde";
+    }
+    return "Önde gidiyor";
+  }
+
   // The option this visitor voted for: server-side for members, local for guests.
   function myChoice(poll, ctx) {
     return ctx.auth.authenticated ? poll.my_vote : window.PollVote.getLocalVote(poll.id);
@@ -46,6 +60,27 @@
     }
   }
 
+  function renderMeter(poll) {
+    const meter = el("div", "poll-meter");
+    meter.setAttribute("role", "img");
+    meter.setAttribute(
+      "aria-label",
+      poll.total_votes
+        ? "Oy dağılımı: " + poll.options.map((o) => o.text + " %" + o.percent).join(", ")
+        : "Henüz oy yok"
+    );
+    poll.options.forEach((option, index) => {
+      if (!option.votes) return;
+      const segment = el("span", "seg color-" + (index % 5));
+      meter.append(segment);
+      // Grow from 0 so the distribution animates in.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => (segment.style.flexGrow = option.votes))
+      );
+    });
+    return meter;
+  }
+
   function create(poll, ctx) {
     const card = el("article", "card poll-card");
     card.dataset.pollId = poll.id;
@@ -62,47 +97,34 @@
     when.href = "/anket/" + poll.id + "/";
     const meta = el("p", "poll-meta");
     meta.append("@" + poll.author + " · ", when);
-    card.replaceChildren(el("h2", "poll-question", poll.question), meta);
 
-    const list = el("ul", "poll-options");
+    card.replaceChildren(el("h2", "poll-question", poll.question), meta, renderMeter(poll));
+    card.append(el("p", "poll-verdict", verdict(poll)));
+    card.append(el("p", "poll-count", poll.total_votes + " kişi oy verdi"));
+
+    const chips = el("ul", "poll-chips");
     poll.options.forEach((option, index) => {
-      const item = el("li");
-      const colorClass = "color-" + (index % 5);
       const isMine = hasVoted && option.id === mine;
+      const classes = "poll-chip color-" + (index % 5) + (isMine ? " is-mine" : "");
+      const interactive = !hasVoted || canChange;
+      const chip = el(interactive ? "button" : "div", classes);
+      chip.append(el("span", "chip-dot"), el("span", "chip-text", (isMine ? "✓ " : "") + option.text));
+      if (hasVoted) chip.append(el("span", "chip-pct", option.percent + "%"));
 
-      if (!hasVoted) {
-        const button = el("button", "poll-option " + colorClass, option.text);
-        button.type = "button";
-        button.addEventListener("click", () => castVote(card, poll, ctx, option.id));
-        item.append(button);
-      } else {
-        const row = el(canChange ? "button" : "div", "poll-result " + colorClass + (isMine ? " is-mine" : ""));
-        if (canChange) {
-          row.type = "button";
-          row.setAttribute("aria-pressed", String(isMine));
-          row.addEventListener("click", () => {
-            if (!isMine) castVote(card, poll, ctx, option.id);
-          });
-        }
-        const bar = el("span", "poll-bar");
-        bar.setAttribute("aria-hidden", "true");
-        const label = el("span", "poll-label", (isMine ? "✓ " : "") + option.text);
-        const count = el("span", "poll-count", option.percent + "% · " + option.votes + " oy");
-        row.append(bar, label, count);
-        // Grow the bar from 0 so the result animates in.
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => (bar.style.width = option.percent + "%"))
-        );
-        item.append(row);
+      if (interactive) {
+        chip.type = "button";
+        if (canChange) chip.setAttribute("aria-pressed", String(isMine));
+        chip.addEventListener("click", () => {
+          if (!isMine) castVote(card, poll, ctx, option.id);
+        });
       }
-      list.append(item);
+      const item = el("li");
+      item.append(chip);
+      chips.append(item);
     });
-    card.append(list);
+    card.append(chips);
 
-    const total = poll.total_votes + " oy";
-    card.append(
-      el("p", "poll-total", canChange ? total + " · Oyunu değiştirmek için başka bir seçeneğe dokun" : total)
-    );
+    if (canChange) card.append(el("p", "poll-hint", "Oyunu değiştirmek için başka bir seçeneğe dokun."));
 
     const actions = el("div", "poll-actions");
     if (ctx.share) {

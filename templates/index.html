@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block container_class %}container-wide{% endblock %}
+
 {% block content %}
 <section aria-labelledby="feed-title">
-  <h1 id="feed-title" class="feed-title">Kararsız kalanlar 🤔</h1>
-  <p class="muted">Bir anket seç, karar vermelerine yardım et.</p>
-  <a class="btn btn-primary btn-block create-cta" href="/olustur/">+ Anket oluştur</a>
+  <h1 id="feed-title" class="sr-only">Anketler</h1>
+
+  <div class="tabs" role="group" aria-label="Anket sıralaması">
+    <button type="button" class="tab" data-sort="new" aria-selected="true">Yeni</button>
+    <button type="button" class="tab" data-sort="popular" aria-selected="false">Popüler</button>
+  </div>
 
   <div id="feed" class="feed" aria-live="polite"></div>
   <p id="feed-status" class="feed-status" role="status" hidden></p>

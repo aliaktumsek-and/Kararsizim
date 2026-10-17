@@ -15,17 +15,14 @@
 <body>
   <a class="skip-link" href="#main">İçeriğe geç</a>
   <header class="site-header">
-    <div class="container">
-      <a class="logo" href="/" aria-label="Kararsızım ana sayfa">
-        <span class="logo-mark" aria-hidden="true">🤔</span>
-        <span>Kararsızım</span>
-      </a>
+    <div class="container container-header">
+      <a class="logo" href="/" aria-label="Kararsızım ana sayfa">Kararsızım</a>
       <nav id="auth-nav" class="auth-nav" aria-label="Hesap"></nav>
     </div>
   </header>
 
   <main id="main">
-    <div class="container">
+    <div class="container {% block container_class %}{% endblock %}">
       {% block content %}{% endblock %}
     </div>
   </main>

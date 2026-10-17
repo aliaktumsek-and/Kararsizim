@@ -74,8 +74,11 @@ def poll_list(request):
     except ValueError:
         page = 1
     start = (page - 1) * PAGE_SIZE
+    queryset = _poll_queryset()
+    if request.GET.get("sort") == "popular":
+        queryset = queryset.annotate(vote_total=Count("votes")).order_by("-vote_total", "-created_at", "-id")
     # Fetch one extra row to learn whether another page exists without a COUNT query.
-    rows = list(_poll_queryset()[start : start + PAGE_SIZE + 1])
+    rows = list(queryset[start : start + PAGE_SIZE + 1])
     has_next = len(rows) > PAGE_SIZE
     polls = rows[:PAGE_SIZE]
     my_votes = _my_votes(request, polls)

@@ -24,22 +24,24 @@
 
   function renderNav(nav, state) {
     nav.replaceChildren();
+    const create = el("a", "btn btn-primary btn-sm", "Anket oluştur");
+    create.href = "/olustur/";
+
     if (state.authenticated) {
-      nav.append(el("span", "nav-user", "@" + state.username));
-      const logout = el("button", "btn btn-ghost", "Çıkış");
+      const logout = el("button", "btn btn-ghost btn-outline btn-sm", "Çıkış yap");
       logout.type = "button";
       logout.addEventListener("click", async () => {
         logout.disabled = true;
         await window.api.post("/api/auth/logout/");
         window.location.assign("/");
       });
-      nav.append(logout);
+      nav.append(el("span", "nav-user", "@" + state.username), create, logout);
     } else {
-      const login = el("a", "btn btn-ghost", "Giriş");
-      login.href = "/giris/";
-      const register = el("a", "btn btn-primary btn-sm", "Kayıt ol");
+      const register = el("a", "btn btn-ghost btn-sm nav-register", "Kayıt ol");
       register.href = "/kayit/";
-      nav.append(login, register);
+      const login = el("a", "btn btn-ghost btn-outline btn-sm", "Giriş yap");
+      login.href = "/giris/";
+      nav.append(register, login, create);
     }
   }
 
