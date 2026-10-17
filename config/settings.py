@@ -51,6 +51,13 @@ for var in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
         ALLOWED_HOSTS.append(host)
         CSRF_TRUSTED_ORIGINS.append(f"https://{host}")
 
+# Vercel can also serve the project under extra *.vercel.app aliases (for example
+# a generated production domain) that these variables do not list. Vercel routes
+# requests by hostname, so only this project's own domains ever reach the app.
+if not DEBUG:
+    ALLOWED_HOSTS.append(".vercel.app")
+    CSRF_TRUSTED_ORIGINS.append("https://*.vercel.app")
+
 if DEBUG:
     ALLOWED_HOSTS += ["localhost", "127.0.0.1", "[::1]"]
 
