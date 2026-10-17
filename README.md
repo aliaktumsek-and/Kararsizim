@@ -18,6 +18,23 @@ Proje planı ve kurallar: [`CLAUDE.md`](CLAUDE.md) (kaynak: `docs/KARARSIZIM_PLA
 - Yazar kendi anketini silebilir. Her anketin paylaşılabilir bir sayfası vardır (`/anket/<id>/`).
 - Demo veri: `python manage.py seed_polls` (temizlemek için `--clear`).
 
+## Hız sınırları
+
+Sayaçlar veritabanındadır (`ratelimit` uygulaması; sunucusuz ortamda bellek paylaşılmaz). Tabloda ham IP, kullanıcı adı ya da oy
+**tutulmaz**: yalnızca gizli anahtarla (HMAC) özetlenmiş değer ve zaman damgası saklanır, kayıtlar bir gün sonra silinir.
+Anonim oyla hiçbir ilişkisi yoktur. Aşılınca `429` ve `Retry-After` döner.
+
+| İşlem | Sınır |
+|---|---|
+| Giriş | IP başına 15 dk'da 20 deneme; hesap başına 15 dk'da 5 başarısız deneme |
+| Kayıt | IP başına saatte 60 deneme |
+| Anket oluşturma | Kullanıcı başına saatte 5, günde 20 |
+| Oy (üye) | Kullanıcı başına dakikada 30 |
+| Oy (anonim) | IP başına dakikada 10, saatte 120 |
+
+Sınırlar `ratelimit/utils.py` içindeki `Rule` tanımlarındadır. IP, Vercel arkasında `X-Forwarded-For`'dan okunur
+(`TRUST_PROXY_HEADERS`, yerelde kapalıdır).
+
 ## Testler
 
 ```powershell

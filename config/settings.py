@@ -40,6 +40,10 @@ if not SECRET_KEY:
     else:
         raise ImproperlyConfigured("SECRET_KEY environment variable is required when DEBUG is off.")
 
+# Behind Vercel's proxy the caller's IP only exists in X-Forwarded-For (used for
+# rate limiting). Off in local development, where that header could be forged.
+TRUST_PROXY_HEADERS = env_bool("TRUST_PROXY_HEADERS", default=not DEBUG)
+
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
@@ -73,6 +77,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "accounts",
     "polls",
+    "ratelimit",
 ]
 
 MIDDLEWARE = [

@@ -10,6 +10,17 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
 from config.jsonutil import read_json
+from ratelimit.utils import (
+    LOGIN_FAILS,
+    LOGIN_IP,
+    REGISTER_IP,
+    clear,
+    client_ip,
+    hit,
+    record,
+    retry_after,
+    too_many,
+)
 
 from .models import (
     USERNAME_MAX_LENGTH,
@@ -72,6 +83,10 @@ def register(request):
     if data is None:
         return _errors({"__all__": ["Geçersiz istek."]})
 
+    wait = hit(REGISTER_IP, client_ip(request))
+    if wait:
+        return too_many(wait)
+
     username = _text(data, "username").strip()
     email = _text(data, "email").strip()
     password = _text(data, "password")
@@ -133,6 +148,16 @@ def login_view(request):
     if not identifier or not password:
         return _errors({"__all__": ["Kullanıcı adı / e-posta ve parola gerekli."]})
 
+    # Brute-force protection: cap attempts per IP and failed attempts per account.
+    # The account key is the typed identifier (hashed in the counter table), so it
+    # behaves the same whether or not such an account exists.
+    ip = client_ip(request)
+    account_key = identifier.lower()
+    wait = max(retry_after(LOGIN_IP, ip), retry_after(LOGIN_FAILS, account_key))
+    if wait:
+        return too_many(wait)
+    record(LOGIN_IP, ip)
+
     lookup = "email__iexact" if "@" in identifier else "username__iexact"
     found = User.objects.filter(**{lookup: identifier}).first()
     # authenticate() also runs the password hasher for unknown users, keeping
@@ -143,8 +168,10 @@ def login_view(request):
         password=password,
     )
     if user is None:
+        record(LOGIN_FAILS, account_key)
         return _errors({"__all__": [GENERIC_LOGIN_ERROR]}, status=401)
 
+    clear(LOGIN_FAILS, account_key)
     login(request, user)
     return JsonResponse({"authenticated": True, "username": user.username})
 

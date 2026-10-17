@@ -8,6 +8,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from config.jsonutil import read_json
+from ratelimit.utils import POLL_CREATE, VOTE_ANON, VOTE_MEMBER, client_ip, hit, too_many
 
 from .models import MAX_OPTIONS, MIN_OPTIONS, OPTION_MAX_LENGTH, QUESTION_MAX_LENGTH, Option, Poll, Vote
 
@@ -149,6 +150,16 @@ def poll_vote(request, poll_id):
     if option is None:
         return JsonResponse({"errors": {"option_id": ["Geçerli bir seçenek seç."]}}, status=400)
 
+    # Rate limit only votes that would actually be stored. Members are limited by
+    # account; anonymous visitors by a short-lived keyed hash of their IP, which is
+    # never stored with the vote itself.
+    if request.user.is_authenticated:
+        wait = hit(VOTE_MEMBER, str(request.user.id))
+    else:
+        wait = hit(VOTE_ANON, client_ip(request))
+    if wait:
+        return too_many(wait)
+
     with transaction.atomic():
         if request.user.is_authenticated:
             # One vote per user per poll: voting again changes the earlier choice.
@@ -206,6 +217,10 @@ def poll_create(request):
     question, options, errors = _validate_new_poll(data)
     if errors:
         return JsonResponse({"errors": errors}, status=400)
+
+    wait = hit(POLL_CREATE, str(request.user.id))
+    if wait:
+        return too_many(wait)
 
     with transaction.atomic():
         poll = Poll.objects.create(author=request.user, question=question)
