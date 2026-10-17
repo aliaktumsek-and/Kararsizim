@@ -1,12 +1,19 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block content %}
-<section class="card hero">
-  <div class="accent-dots" aria-hidden="true">
-    <span></span><span></span><span></span><span></span><span></span>
+<section aria-labelledby="feed-title">
+  <h1 id="feed-title" class="feed-title">Kararsız kalanlar 🤔</h1>
+  <p class="muted">Bir anket seç, karar vermelerine yardım et.</p>
+
+  <div id="feed" class="feed" aria-live="polite"></div>
+  <p id="feed-status" class="feed-status" role="status" hidden></p>
+  <div class="feed-more">
+    <button id="feed-more" type="button" class="btn btn-ghost btn-outline" hidden>Daha fazla yükle</button>
   </div>
-  <h1>Merhaba Kararsızım 👋</h1>
-  <p>Kararsız kaldığın konuları sor, başkaları oylayarak yardım etsin.</p>
-  <button type="button" class="btn btn-primary" disabled aria-disabled="true">Çok yakında</button>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/feed.js' %}"></script>
 {% endblock %}
