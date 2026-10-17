@@ -1,5 +1,3 @@
-import json
-
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -10,6 +8,8 @@ from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
+
+from config.jsonutil import read_json
 
 from .models import (
     USERNAME_MAX_LENGTH,
@@ -26,15 +26,6 @@ GENERIC_LOGIN_ERROR = "Kullanıcı adı / e-posta veya parola hatalı."
 
 def _errors(errors, status=400):
     return JsonResponse({"errors": errors}, status=status)
-
-
-def _read_json(request):
-    """Return the parsed JSON object body, or None when it is invalid."""
-    try:
-        data = json.loads(request.body or b"{}")
-    except (ValueError, UnicodeDecodeError):
-        return None
-    return data if isinstance(data, dict) else None
 
 
 def _text(data, key):
@@ -77,7 +68,7 @@ def register_page(request):
 
 @require_POST
 def register(request):
-    data = _read_json(request)
+    data = read_json(request)
     if data is None:
         return _errors({"__all__": ["Geçersiz istek."]})
 
@@ -133,7 +124,7 @@ def register(request):
 
 @require_POST
 def login_view(request):
-    data = _read_json(request)
+    data = read_json(request)
     if data is None:
         return _errors({"__all__": ["Geçersiz istek."]})
 

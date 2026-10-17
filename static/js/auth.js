@@ -43,11 +43,16 @@
     }
   }
 
+  // Resolves to { authenticated, username }; other scripts await it instead of
+  // calling /api/auth/me/ again.
+  window.authReady = window.api.get("/api/auth/me/").then(({ ok, data }) =>
+    ok && data ? data : { authenticated: false, username: null }
+  );
+
   async function initNav() {
     const nav = document.getElementById("auth-nav");
     if (!nav) return;
-    const { ok, data } = await window.api.get("/api/auth/me/");
-    renderNav(nav, ok && data ? data : { authenticated: false });
+    renderNav(nav, await window.authReady);
   }
 
   // --- Forms ---

@@ -77,3 +77,60 @@ class PollApiTests(TestCase):
         self.client.login(username="ali_k", password="kedi-masa-2026")
         self.assertEqual(self.client.get(f"/api/polls/{poll.id}/").json()["my_vote"], yes.id)
         self.assertEqual(self.client.get("/api/polls/").json()["polls"][0]["my_vote"], yes.id)
+
+
+class VoteApiTests(TestCase):
+    def setUp(self):
+        self.author = User.objects.create_user("ali_k", "ali@example.com", "kedi-masa-2026")
+        self.poll, (self.yes, self.no) = make_poll(self.author, "Soru")
+
+    def vote(self, option_id, poll=None, client=None):
+        import json
+
+        poll = poll or self.poll
+        return (client or self.client).post(
+            f"/api/polls/{poll.id}/vote/",
+            data=json.dumps({"option_id": option_id}),
+            content_type="application/json",
+        )
+
+    def test_anonymous_vote_is_stored_without_a_user(self):
+        response = self.vote(self.yes.id)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["total_votes"], 1)
+        self.assertEqual(body["options"][0]["percent"], 100)
+        self.assertIsNone(body["my_vote"])
+        self.assertEqual(Vote.objects.get().user, None)
+
+    def test_logged_in_vote_and_change(self):
+        self.client.login(username="ali_k", password="kedi-masa-2026")
+        first = self.vote(self.yes.id).json()
+        self.assertEqual(first["my_vote"], self.yes.id)
+        second = self.vote(self.no.id).json()
+        self.assertEqual(second["my_vote"], self.no.id)
+        self.assertEqual(second["total_votes"], 1)
+        self.assertEqual(Vote.objects.filter(user=self.author).count(), 1)
+        self.assertEqual([o["votes"] for o in second["options"]], [0, 1])
+
+    def test_option_must_belong_to_the_poll(self):
+        other, (other_yes, _) = make_poll(self.author, "Başka soru")
+        self.assertEqual(self.vote(other_yes.id).status_code, 400)
+        self.assertEqual(Vote.objects.count(), 0)
+
+    def test_invalid_option_ids_are_rejected(self):
+        for value in (None, "abc", True, 999999, [1]):
+            self.assertEqual(self.vote(value).status_code, 400, value)
+
+    def test_unknown_poll_and_wrong_method(self):
+        class Missing:
+            id = 999999
+
+        self.assertEqual(self.vote(self.yes.id, poll=Missing()).status_code, 404)
+        self.assertEqual(self.client.get(f"/api/polls/{self.poll.id}/vote/").status_code, 405)
+
+    def test_csrf_is_enforced(self):
+        from django.test import Client
+
+        strict = Client(enforce_csrf_checks=True)
+        self.assertEqual(self.vote(self.yes.id, client=strict).status_code, 403)

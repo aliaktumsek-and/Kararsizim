@@ -1,7 +1,10 @@
+from django.db import transaction
 from django.db.models import Count, Prefetch
 from django.http import Http404, JsonResponse
-from django.shortcuts import render
-from django.views.decorators.http import require_GET
+from django.shortcuts import get_object_or_404, render
+from django.views.decorators.http import require_GET, require_POST
+
+from config.jsonutil import read_json
 
 from .models import Option, Poll, Vote
 
@@ -75,3 +78,26 @@ def poll_detail(request, poll_id):
     if poll is None:
         raise Http404
     return JsonResponse(serialize_poll(poll, _my_votes(request, [poll]).get(poll.id)))
+
+
+@require_POST
+def poll_vote(request, poll_id):
+    poll = get_object_or_404(Poll, pk=poll_id)
+    data = read_json(request) or {}
+    option_id = data.get("option_id")
+    option = None
+    if isinstance(option_id, int) and not isinstance(option_id, bool):
+        option = Option.objects.filter(pk=option_id, poll=poll).first()
+    if option is None:
+        return JsonResponse({"errors": {"option_id": ["Geçerli bir seçenek seç."]}}, status=400)
+
+    with transaction.atomic():
+        if request.user.is_authenticated:
+            # One vote per user per poll: voting again changes the earlier choice.
+            Vote.objects.update_or_create(poll=poll, user=request.user, defaults={"option": option})
+        else:
+            # Anonymous votes carry no identity; repeat votes are only discouraged client-side.
+            Vote.objects.create(poll=poll, option=option)
+
+    fresh = _poll_queryset().get(pk=poll.pk)
+    return JsonResponse(serialize_poll(fresh, option.id if request.user.is_authenticated else None))
